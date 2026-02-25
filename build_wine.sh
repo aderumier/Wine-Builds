@@ -298,6 +298,9 @@ if [ ! -d wine ]; then
 	exit 1
 fi
 
+echo "Applying rawinput-multi-gun-support patch..."
+patch -d wine -Np1 < "${scriptdir}"/002-rawinput-multi-gun-support.patch
+
 cd wine || exit 1
 dlls/winevulkan/make_vulkan
 tools/make_requests
