@@ -357,3 +357,14 @@ index b126162..9078589 100644
      header->wparam = 0;
      header->usage  = MAKELONG(HID_USAGE_GENERIC_MOUSE, HID_USAGE_PAGE_GENERIC);
  
+--- a/dlls/win32u/rawinput.c
++++ b/dlls/win32u/rawinput.c
+@@ -810,7 +810,7 @@ BOOL WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT d
+             return FALSE;
+         }
+ 
+-        if (devices[i].dwFlags & ~(RIDEV_REMOVE|RIDEV_NOLEGACY|RIDEV_INPUTSINK|RIDEV_DEVNOTIFY))
++        if (devices[i].dwFlags & ~(RIDEV_REMOVE|RIDEV_NOLEGACY|RIDEV_INPUTSINK|RIDEV_DEVNOTIFY|RIDEV_CAPTUREMOUSE))
+             FIXME( "Unhandled flags %#x for device %u.\n", (int)devices[i].dwFlags, i );
+     }
+ 
