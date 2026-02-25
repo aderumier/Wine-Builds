@@ -85,15 +85,7 @@ index 6650d65..69f0863 100644
  }
  
  static struct device *find_device_from_handle( HANDLE handle, BOOL refresh )
-@@ -692,7 +745,7 @@ BOOL WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT d
-             return FALSE;
-         }
- 
--        if (devices[i].dwFlags & ~(RIDEV_REMOVE|RIDEV_NOLEGACY|RIDEV_INPUTSINK|RIDEV_DEVNOTIFY))
-+        if (devices[i].dwFlags & ~(RIDEV_REMOVE|RIDEV_NOLEGACY|RIDEV_INPUTSINK|RIDEV_DEVNOTIFY|RIDEV_CAPTUREMOUSE))
-             FIXME( "Unhandled flags %#x for device %u.\n", devices[i].dwFlags, i );
-     }
- 
+
 diff --git a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
 index c55d680..dfdd298 100644
 --- a/dlls/winex11.drv/mouse.c

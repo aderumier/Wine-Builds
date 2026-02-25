@@ -299,7 +299,11 @@ if [ ! -d wine ]; then
 fi
 
 echo "Applying rawinput-multi-gun-support patch..."
-patch -d wine -Np1 < "${scriptdir}"/002-rawinput-multi-gun-support.patch
+if ! patch -d wine -Np1 < "${scriptdir}"/002-rawinput-multi-gun-support.patch; then
+    echo
+    echo "Batocera rawinput patch was not applied correctly!"
+    exit 1
+fi
 
 cd wine || exit 1
 dlls/winevulkan/make_vulkan
