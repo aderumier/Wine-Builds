@@ -298,17 +298,21 @@ if [ ! -d wine ]; then
 	exit 1
 fi
 
-if [ "$WINE_BRANCH" = "proton" ]; then
-	RAWINPUT_PATCH="002-rawinput-multi-gun-support-proton.patch"
-else
-	RAWINPUT_PATCH="002-rawinput-multi-gun-support-winetkg.patch"
-fi
+if [ "$WINE_BRANCH" = "proton" ] || [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
+	if [ "$WINE_BRANCH" = "proton" ]; then
+		RAWINPUT_PATCH="002-rawinput-multi-gun-support-proton.patch"
+	else
+		RAWINPUT_PATCH="002-rawinput-multi-gun-support-winetkg.patch"
+	fi
 
-echo "Applying rawinput-multi-gun-support patch (${RAWINPUT_PATCH})..."
-if ! patch -d wine -Np1 < "${scriptdir}"/${RAWINPUT_PATCH}; then
-	echo
-	echo "Batocera rawinput patch was not applied correctly!"
-	exit 1
+	echo "Applying rawinput-multi-gun-support patch (${RAWINPUT_PATCH})..."
+	if ! patch -d wine -Np1 < "${scriptdir}"/${RAWINPUT_PATCH}; then
+		echo
+		echo "Batocera rawinput patch was not applied correctly!"
+		exit 1
+	fi
+else
+	echo "Skipping rawinput-multi-gun-support patch for branch: ${WINE_BRANCH}"
 fi
 
 echo "Applying mountmgr-serial-noctty patch (002-fix-mountmgr-serial-noctty.patch)..."
