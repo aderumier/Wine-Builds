@@ -311,6 +311,13 @@ if ! patch -d wine -Np1 < "${scriptdir}"/${RAWINPUT_PATCH}; then
 	exit 1
 fi
 
+echo "Applying mountmgr-serial-noctty patch (002-fix-mountmgr-serial-noctty.patch)..."
+if ! patch -d wine -Np1 < "${scriptdir}"/002-fix-mountmgr-serial-noctty.patch; then
+	echo
+	echo "Batocera mountmgr patch was not applied correctly!"
+	exit 1
+fi
+
 cd wine || exit 1
 dlls/winevulkan/make_vulkan
 tools/make_requests
