@@ -208,7 +208,7 @@ if [ -n "${CUSTOM_SRC_PATH}" ]; then
 	BUILD_NAME="${WINE_VERSION}"-custom
 elif [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
 	if [ "$WINE_BRANCH" = "staging-tkg" ]; then
-		git clone https://github.com/Kron4ek/wine-tkg wine
+		git clone https://github.com/Kron4ek/wine-tkg wine -b 9.17
 	else
 		git clone https://github.com/Kron4ek/wine-tkg wine -b fsync
 	fi
@@ -298,11 +298,17 @@ if [ ! -d wine ]; then
 	exit 1
 fi
 
-echo "Applying rawinput-multi-gun-support patch..."
-if ! patch -d wine -Np1 < "${scriptdir}"/002-rawinput-multi-gun-support.patch; then
-    echo
-    echo "Batocera rawinput patch was not applied correctly!"
-    exit 1
+if [ "$WINE_BRANCH" = "proton" ]; then
+	RAWINPUT_PATCH="002-rawinput-multi-gun-support-proton.patch"
+else
+	RAWINPUT_PATCH="002-rawinput-multi-gun-support-winetkg.patch"
+fi
+
+echo "Applying rawinput-multi-gun-support patch (${RAWINPUT_PATCH})..."
+if ! patch -d wine -Np1 < "${scriptdir}"/${RAWINPUT_PATCH}; then
+	echo
+	echo "Batocera rawinput patch was not applied correctly!"
+	exit 1
 fi
 
 cd wine || exit 1
