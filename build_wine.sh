@@ -208,7 +208,7 @@ if [ -n "${CUSTOM_SRC_PATH}" ]; then
 	BUILD_NAME="${WINE_VERSION}"-custom
 elif [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
 	if [ "$WINE_BRANCH" = "staging-tkg" ]; then
-		git clone https://github.com/Kron4ek/wine-tkg wine -b 9.17
+		git clone https://github.com/Kron4ek/wine-tkg wine -b 10.20
 	else
 		git clone https://github.com/Kron4ek/wine-tkg wine -b fsync
 	fi
