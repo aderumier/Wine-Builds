@@ -1,0 +1,283 @@
+#!/usr/bin/env python3
+"""wine-mouse-inject: Client script that reads lightgun/mouse evdev devices
+and injects their position/button state into Wine's virtual rawinput mice
+via the Unix domain socket listener built into the Wine X11 driver.
+
+Protocol: 12-byte little-endian packets (multiplexed)
+  uint8_t  mouse_index   (0-7, maps to virtual mouse handle 0x10001+index)
+  uint8_t  buttons       (bit0=left, bit1=right, bit2=middle)
+  uint8_t  reserved0
+  uint8_t  reserved1
+  int32_t  x             (screen pixel X)
+  int32_t  y             (screen pixel Y)
+
+Usage:
+  wine-mouse-inject <config.json>
+
+Config example:
+  {
+    "width": 1920,
+    "height": 1080,
+    "socket": "/tmp/wine-mouse.sock",
+    "guns": [
+      {"device": "/dev/input/event5", "mouse_index": 0},
+      {"device": "/dev/input/event6", "mouse_index": 1}
+    ]
+  }
+
+Or auto-detect guns:
+  {
+    "width": 1920,
+    "height": 1080,
+    "auto_detect": true
+  }
+"""
+
+import json
+import logging
+import os
+import select
+import signal
+import socket
+import struct
+import sys
+import time
+
+logger = logging.getLogger("wine-mouse-inject")
+
+PACKET_FMT = '<BBBBii'
+PACKET_SIZE = 12
+DEFAULT_SOCKET = "/tmp/wine-mouse.sock"
+
+
+class GunState:
+    def __init__(self, mouse_index, x_min=0, x_max=65535, y_min=0, y_max=65535):
+        self.mouse_index = mouse_index
+        self.x = 0
+        self.y = 0
+        self.x_min = x_min
+        self.x_max = x_max
+        self.y_min = y_min
+        self.y_max = y_max
+        self.buttons = 0  # bit0=L, bit1=R, bit2=M
+
+    def pixel_x(self, screen_w):
+        if self.x_max <= self.x_min:
+            return 0
+        n = (self.x - self.x_min) / (self.x_max - self.x_min)
+        return int(max(0.0, min(1.0, n)) * screen_w)
+
+    def pixel_y(self, screen_h):
+        if self.y_max <= self.y_min:
+            return 0
+        n = (self.y - self.y_min) / (self.y_max - self.y_min)
+        return int(max(0.0, min(1.0, n)) * screen_h)
+
+
+def find_gun_devices():
+    """Detect lightgun evdev devices."""
+    try:
+        import pyudev
+        context = pyudev.Context()
+        guns = []
+        for device in context.list_devices(subsystem='input'):
+            if device.properties.get('ID_INPUT_GUN') == '1':
+                node = device.device_node
+                if node and '/dev/input/event' in node:
+                    guns.append(node)
+        return sorted(guns)[:8]
+    except ImportError:
+        return _find_gun_fallback()
+
+
+def _find_gun_fallback():
+    try:
+        import evdev
+        from evdev import ecodes
+        guns = []
+        for path in sorted(evdev.list_devices()):
+            try:
+                dev = evdev.InputDevice(path)
+                caps = dev.capabilities(verbose=False)
+                abs_codes = [c[0] if isinstance(c, tuple) else c
+                             for c in caps.get(ecodes.EV_ABS, [])]
+                key_codes = caps.get(ecodes.EV_KEY, [])
+                if (ecodes.ABS_X in abs_codes
+                        and ecodes.ABS_Y in abs_codes
+                        and ecodes.BTN_LEFT in key_codes):
+                    guns.append(path)
+                dev.close()
+            except Exception:
+                pass
+        return guns[:8]
+    except ImportError:
+        return []
+
+
+def connect_socket(sock_path, timeout=30):
+    """Connect to Wine's mouse socket, retrying until available."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.connect(sock_path)
+            logger.info("Connected to %s", sock_path)
+            return s
+        except (ConnectionRefusedError, FileNotFoundError):
+            time.sleep(0.5)
+    logger.error("Could not connect to %s after %ds", sock_path, timeout)
+    sys.exit(1)
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
+
+    if len(sys.argv) < 2:
+        logger.error("Usage: %s <config.json>", sys.argv[0])
+        sys.exit(1)
+
+    try:
+        import evdev
+        from evdev import ecodes
+    except ImportError:
+        logger.error("python-evdev is required: pip install evdev")
+        sys.exit(1)
+
+    with open(sys.argv[1]) as f:
+        config = json.load(f)
+
+    screen_w = config.get("width", 1920)
+    screen_h = config.get("height", 1080)
+    sock_path = config.get("socket", DEFAULT_SOCKET)
+
+    # Build gun list
+    guns_cfg = config.get("guns", [])
+    if not guns_cfg and config.get("auto_detect", False):
+        paths = find_gun_devices()
+        guns_cfg = [{"device": p, "mouse_index": i}
+                    for i, p in enumerate(paths)]
+
+    if not guns_cfg:
+        logger.error("No gun devices configured or detected")
+        sys.exit(1)
+
+    # Open evdev devices
+    players = []
+    for i, gcfg in enumerate(guns_cfg):
+        path = gcfg["device"]
+        mouse_index = gcfg.get("mouse_index", i)
+        try:
+            dev = evdev.InputDevice(path)
+        except Exception as e:
+            logger.warning("Cannot open %s: %s", path, e)
+            continue
+
+        state = GunState(mouse_index)
+        try:
+            info = dev.absinfo(ecodes.ABS_X)
+            state.x_min, state.x_max = info.min, info.max
+        except Exception:
+            pass
+        try:
+            info = dev.absinfo(ecodes.ABS_Y)
+            state.y_min, state.y_max = info.min, info.max
+        except Exception:
+            pass
+
+        players.append({"dev": dev, "state": state})
+        logger.info("Gun %d -> mouse_index %d: %s (%s) x=[%d,%d] y=[%d,%d]",
+                     i, mouse_index, path, dev.name,
+                     state.x_min, state.x_max, state.y_min, state.y_max)
+
+    if not players:
+        logger.error("No devices opened")
+        sys.exit(1)
+
+    # Connect to Wine's socket
+    sock = connect_socket(sock_path)
+
+    running = True
+
+    def stop(sig, frame):
+        nonlocal running
+        running = False
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+    try:
+        while running:
+            fds = [p["dev"].fd for p in players]
+            try:
+                readable, _, _ = select.select(fds, [], [], 0.05)
+            except Exception:
+                continue
+
+            for player in list(players):
+                if player["dev"].fd not in readable:
+                    continue
+                st = player["state"]
+                changed = False
+                try:
+                    for event in player["dev"].read():
+                        if event.type == ecodes.EV_ABS:
+                            if event.code == ecodes.ABS_X:
+                                st.x = event.value
+                            elif event.code == ecodes.ABS_Y:
+                                st.y = event.value
+                        elif event.type == ecodes.EV_KEY:
+                            if event.code == ecodes.BTN_LEFT:
+                                if event.value:
+                                    st.buttons |= 1
+                                else:
+                                    st.buttons &= ~1
+                            elif event.code == ecodes.BTN_RIGHT:
+                                if event.value:
+                                    st.buttons |= 2
+                                else:
+                                    st.buttons &= ~2
+                            elif event.code == ecodes.BTN_MIDDLE:
+                                if event.value:
+                                    st.buttons |= 4
+                                else:
+                                    st.buttons &= ~4
+                        elif event.type == ecodes.EV_SYN:
+                            changed = True
+                except OSError:
+                    logger.warning("Device disconnected: %s",
+                                   player["dev"].path)
+                    try:
+                        player["dev"].close()
+                    except Exception:
+                        pass
+                    players.remove(player)
+                    continue
+
+                if changed:
+                    px = st.pixel_x(screen_w)
+                    py = st.pixel_y(screen_h)
+                    pkt = struct.pack(PACKET_FMT,
+                                      st.mouse_index, st.buttons,
+                                      0, 0, px, py)
+                    try:
+                        sock.sendall(pkt)
+                    except BrokenPipeError:
+                        logger.info("Socket disconnected, reconnecting...")
+                        try:
+                            sock.close()
+                        except Exception:
+                            pass
+                        sock = connect_socket(sock_path)
+
+    finally:
+        sock.close()
+        for p in players:
+            try:
+                p["dev"].close()
+            except Exception:
+                pass
+        logger.info("Stopped cleanly")
+
+
+if __name__ == "__main__":
+    main()

@@ -90,7 +90,7 @@ diff --git a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
 index c55d680..dfdd298 100644
 --- a/dlls/winex11.drv/mouse.c
 +++ b/dlls/winex11.drv/mouse.c
-@@ -143,6 +143,34 @@ MAKE_FUNCPTR(XIQueryDevice);
+@@ -143,6 +143,175 @@ MAKE_FUNCPTR(XIQueryDevice);
  MAKE_FUNCPTR(XIQueryVersion);
  MAKE_FUNCPTR(XISelectEvents);
  #undef MAKE_FUNCPTR
@@ -121,6 +121,156 @@ index c55d680..dfdd298 100644
 +        if (raw_mouse_map[i].sourceid == sourceid)
 +            return i;
 +    return -1;
++}
++
++/* ─── Socket injection for virtual mice ─── */
++#include <sys/socket.h>
++#include <sys/un.h>
++#include <unistd.h>
++#include <errno.h>
++#include <pthread.h>
++
++#define WINE_MOUSE_SOCKET_DEFAULT "/tmp/wine-mouse.sock"
++#define WINE_MOUSE_PKT_SIZE 12
++#define WINE_MOUSE_RING_SIZE 1024
++
++#pragma pack(push, 1)
++struct wine_mouse_packet {
++    unsigned char mouse_index;
++    unsigned char buttons;
++    unsigned char reserved0;
++    unsigned char reserved1;
++    int x;
++    int y;
++};
++#pragma pack(pop)
++
++static struct wine_mouse_packet mouse_ring[WINE_MOUSE_RING_SIZE];
++static volatile unsigned int mouse_ring_head;
++static volatile unsigned int mouse_ring_tail;
++static unsigned char socket_prev_buttons[WINE_RAW_MOUSE_MAX];
++static int mouse_socket_active;
++static int mouse_socket_screen_w;
++static int mouse_socket_screen_h;
++
++static void process_mouse_socket_packets( void )
++{
++    unsigned int tail, head;
++
++    if (!mouse_socket_active) return;
++
++    head = __atomic_load_n( &mouse_ring_head, __ATOMIC_ACQUIRE );
++    tail = __atomic_load_n( &mouse_ring_tail, __ATOMIC_RELAXED );
++
++    while (tail != head)
++    {
++        struct wine_mouse_packet *pkt = &mouse_ring[tail % WINE_MOUSE_RING_SIZE];
++        unsigned int handle = 0x10001 + pkt->mouse_index;
++        unsigned char changed;
++        INPUT input;
++
++        if (pkt->mouse_index >= WINE_RAW_MOUSE_MAX) goto next;
++
++        /* Inject absolute motion */
++        memset( &input, 0, sizeof(input) );
++        input.type = INPUT_MOUSE;
++        input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
++        input.mi.dwExtraInfo = handle;
++        input.mi.dx = pkt->x;
++        input.mi.dy = pkt->y;
++        input.mi.time = NtGetTickCount();
++        NtUserSendHardwareInput( 0, 0, &input, 0 );
++
++        /* Inject button changes */
++        changed = socket_prev_buttons[pkt->mouse_index] ^ pkt->buttons;
++        if (changed)
++        {
++            memset( &input, 0, sizeof(input) );
++            input.type = INPUT_MOUSE;
++            input.mi.dwExtraInfo = handle;
++            input.mi.dx = pkt->x;
++            input.mi.dy = pkt->y;
++            input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
++            input.mi.time = NtGetTickCount();
++            if (changed & 1)
++                input.mi.dwFlags |= (pkt->buttons & 1) ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
++            if (changed & 2)
++                input.mi.dwFlags |= (pkt->buttons & 2) ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP;
++            if (changed & 4)
++                input.mi.dwFlags |= (pkt->buttons & 4) ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP;
++            NtUserSendHardwareInput( 0, 0, &input, 0 );
++            socket_prev_buttons[pkt->mouse_index] = pkt->buttons;
++        }
++    next:
++        tail++;
++    }
++    __atomic_store_n( &mouse_ring_tail, tail, __ATOMIC_RELEASE );
++}
++
++static void *wine_mouse_socket_thread( void *arg )
++{
++    const char *sock_path;
++    struct sockaddr_un addr;
++    int srv, client;
++
++    sock_path = getenv( "WINE_MOUSE_SOCKET" );
++    if (!sock_path) sock_path = WINE_MOUSE_SOCKET_DEFAULT;
++
++    unlink( sock_path );
++    srv = socket( AF_UNIX, SOCK_STREAM, 0 );
++    if (srv < 0) { FIXME( "mouse socket: socket() failed errno=%d\n", errno ); return NULL; }
++
++    memset( &addr, 0, sizeof(addr) );
++    addr.sun_family = AF_UNIX;
++    strncpy( addr.sun_path, sock_path, sizeof(addr.sun_path) - 1 );
++
++    if (bind( srv, (struct sockaddr *)&addr, sizeof(addr) ) < 0)
++    { FIXME( "mouse socket: bind() failed errno=%d\n", errno ); close( srv ); return NULL; }
++
++    chmod( sock_path, 0666 );
++    listen( srv, 4 );
++    FIXME( "Mouse socket listening on %s\n", sock_path );
++
++    while (mouse_socket_active)
++    {
++        fd_set rfds;
++        struct timeval tv;
++        FD_ZERO( &rfds );
++        FD_SET( srv, &rfds );
++        tv.tv_sec = 1; tv.tv_usec = 0;
++        if (select( srv + 1, &rfds, NULL, NULL, &tv ) <= 0) continue;
++
++        client = accept( srv, NULL, NULL );
++        if (client < 0) continue;
++        FIXME( "Mouse socket: client connected\n" );
++
++        while (mouse_socket_active)
++        {
++            unsigned char buf[WINE_MOUSE_PKT_SIZE];
++            int n, off = 0;
++            while (off < WINE_MOUSE_PKT_SIZE)
++            {
++                n = read( client, buf + off, WINE_MOUSE_PKT_SIZE - off );
++                if (n <= 0) goto client_done;
++                off += n;
++            }
++            {
++                unsigned int h = __atomic_load_n( &mouse_ring_head, __ATOMIC_RELAXED );
++                unsigned int next = h + 1;
++                if ((next % WINE_MOUSE_RING_SIZE) != (__atomic_load_n( &mouse_ring_tail, __ATOMIC_ACQUIRE ) % WINE_MOUSE_RING_SIZE))
++                {
++                    memcpy( &mouse_ring[h % WINE_MOUSE_RING_SIZE], buf, WINE_MOUSE_PKT_SIZE );
++                    __atomic_store_n( &mouse_ring_head, next, __ATOMIC_RELEASE );
++                }
++            }
++        }
++    client_done:
++        close( client );
++        FIXME( "Mouse socket: client disconnected\n" );
++    }
++    close( srv );
++    unlink( sock_path );
++    return NULL;
 +}
  #endif
  
@@ -189,10 +339,29 @@ index c55d680..dfdd298 100644
 +            FIXME( "Forced rawinput mode via WINE_FORCE_RAWINPUT\n" );
 +        }
 +    }
++
++    /* Start mouse socket listener thread */
++    {
++        const char *env = getenv( "WINE_RAWMOUSE_COUNT" );
++        int want = env ? atoi( env ) : 0;
++        if (want > 0 && !mouse_socket_active)
++        {
++            pthread_t tid;
++            mouse_socket_active = 1;
++            mouse_socket_screen_w = DisplayWidth( data->display, DefaultScreen( data->display ) );
++            mouse_socket_screen_h = DisplayHeight( data->display, DefaultScreen( data->display ) );
++            if (pthread_create( &tid, NULL, wine_mouse_socket_thread, NULL ) == 0)
++            {
++                pthread_detach( tid );
++                FIXME( "Started mouse socket listener thread (screen %dx%d)\n",
++                       mouse_socket_screen_w, mouse_socket_screen_h );
++            }
++        }
++    }
  }
  
  #else /* HAVE_X11_EXTENSIONS_XINPUT2_H */
-@@ -1851,13 +1939,34 @@ static BOOL map_raw_event_coords( XIRawEvent *event, INPUT *input, BOOL send_raw
+@@ -1851,13 +2080,27 @@ static BOOL map_raw_event_coords( XIRawEvent *event, INPUT *input, BOOL send_raw
  static BOOL X11DRV_RawMotion( XGenericEventCookie *xev )
  {
      struct x11drv_thread_data *thread_data = x11drv_thread_data();
@@ -201,6 +370,9 @@ index c55d680..dfdd298 100644
      XIRawEvent *event = xev->data;
      INPUT input;
 +    int dev_idx;
++
++    /* Drain any packets from the mouse injection socket */
++    process_mouse_socket_packets();
 +
 +    /* Early diagnostic: log ALL events before any filtering */
 +    {
