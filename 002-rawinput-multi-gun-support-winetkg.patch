@@ -90,7 +90,7 @@ diff --git a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
 index c55d680..dfdd298 100644
 --- a/dlls/winex11.drv/mouse.c
 +++ b/dlls/winex11.drv/mouse.c
-@@ -143,6 +143,175 @@ MAKE_FUNCPTR(XIQueryDevice);
+@@ -143,6 +143,184 @@ MAKE_FUNCPTR(XIQueryDevice);
  MAKE_FUNCPTR(XIQueryVersion);
  MAKE_FUNCPTR(XISelectEvents);
  #undef MAKE_FUNCPTR
@@ -275,7 +275,7 @@ index c55d680..dfdd298 100644
  #endif
  
  #ifdef HAVE_X11_EXTENSIONS_XINPUT_H
-@@ -440,6 +468,66 @@ void x11drv_xinput2_init( struct x11drv_thread_data *data )
+@@ -440,6 +468,85 @@ void x11drv_xinput2_init( struct x11drv_thread_data *data )
      }
  
      TRACE( "XInput2 %d.%d available\n", major, minor );
@@ -361,7 +361,7 @@ index c55d680..dfdd298 100644
  }
  
  #else /* HAVE_X11_EXTENSIONS_XINPUT2_H */
-@@ -1851,13 +2080,27 @@ static BOOL map_raw_event_coords( XIRawEvent *event, INPUT *input, BOOL send_raw
+@@ -1851,13 +2080,37 @@ static BOOL map_raw_event_coords( XIRawEvent *event, INPUT *input, BOOL send_raw
  static BOOL X11DRV_RawMotion( XGenericEventCookie *xev )
  {
      struct x11drv_thread_data *thread_data = x11drv_thread_data();
@@ -520,7 +520,7 @@ diff --git a/server/queue.c b/server/queue.c
 index b126162..9078589 100644
 --- a/server/queue.c
 +++ b/server/queue.c
-@@ -2051,7 +2051,7 @@ static void rawmouse_init( struct rawinput *header, RAWMOUSE *rawmouse, int x, i
+@@ -2051,6 +2051,6 @@ static void rawmouse_init( struct rawinput *header, RAWMOUSE *rawmouse, int x, i
      unsigned int i;
  
      header->type   = RIM_TYPEMOUSE;
@@ -528,10 +528,11 @@ index b126162..9078589 100644
 +    header->device = info ? (unsigned int)info : WINE_MOUSE_HANDLE;
      header->wparam = 0;
      header->usage  = MAKELONG(HID_USAGE_GENERIC_MOUSE, HID_USAGE_PAGE_GENERIC);
- 
+
+diff --git a/dlls/win32u/rawinput.c b/dlls/win32u/rawinput.c
 --- a/dlls/win32u/rawinput.c
 +++ b/dlls/win32u/rawinput.c
-@@ -748,7 +748,7 @@ BOOL WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT d
+@@ -748,6 +748,6 @@ BOOL WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT d
              return FALSE;
          }
  
