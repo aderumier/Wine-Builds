@@ -36,7 +36,7 @@ index 6650d65..69f0863 100644
 +        if (!(device = calloc( 1, sizeof(*device) ))) continue;
 +
 +        swprintf( device->path, ARRAY_SIZE(device->path),
-+                  L"\\\\?\\WINE_RAWMOUSE_%u", i + 1 );
++                  L"VirtualMouse #%u", i + 1 );
 +        device->file   = NULL;
 +        device->handle = ULongToHandle( handle );
 +        device->info.cbSize = sizeof(RID_DEVICE_INFO);
