@@ -357,7 +357,7 @@ index c55d680..dfdd298 100644
  {
      struct x11drv_thread_data *thread_data = x11drv_thread_data();
 -    UINT flags = thread_data->xinput2_rawinput ? SEND_HWMSG_NO_MSG : SEND_HWMSG_NO_RAW;
-+    UINT flags = thread_data->xinput2_rawinput ? 0 : SEND_HWMSG_NO_RAW;
++    UINT flags = thread_data->xinput2_rawinput ? SEND_HWMSG_NO_MSG : SEND_HWMSG_NO_RAW;
      XIRawEvent *event = xev->data;
      INPUT input;
 +    int dev_idx;
@@ -436,6 +436,7 @@ index c55d680..dfdd298 100644
 +            input.mi.dx = (LONG)round( (x_raw - raw_mouse_map[dev_idx].x_min) / x_range * (screen_w - 1) );
 +            input.mi.dy = (LONG)round( (y_raw - raw_mouse_map[dev_idx].y_min) / y_range * (screen_h - 1) );
 +            input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
++            flags = 0;
 +
 +            {
 +                static int diag_count;
@@ -501,9 +502,9 @@ index c55d680..dfdd298 100644
 +        {
 +            map_raw_event_coords( event, &input, TRUE );
 +        }
++        NtUserSendHardwareInput( 0, (dev_idx >= 0 && raw_mouse_map[dev_idx].is_absolute) ? 0 : SEND_HWMSG_NO_MSG, &input, 0 );
 +    }
 +
-+    NtUserSendHardwareInput( 0, 0, &input, 0 );
      return TRUE;
  }
  
