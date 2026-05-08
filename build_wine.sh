@@ -52,7 +52,7 @@ export STAGING_VERSION="${STAGING_VERSION:-}"
 export STAGING_ARGS="${STAGING_ARGS:-}"
 
 # Make 64-bit Wine builds with the new WoW64 mode (32-on-64)
-export EXPERIMENTAL_WOW64="${EXPERIMENTAL_WOW64:-true}"
+export EXPERIMENTAL_WOW64="${EXPERIMENTAL_WOW64:-false}"
 
 # Set this to a path to your Wine source code (for example, /home/username/wine-custom-src).
 # This is useful if you already have the Wine source code somewhere on your
@@ -342,7 +342,13 @@ if ! command -v bwrap 1>/dev/null; then
 	exit 1
 fi
 
-if [ ! -d "${BOOTSTRAP_X64}" ] || [ ! -d "${BOOTSTRAP_X32}" ]; then
+if [ ! -d "${BOOTSTRAP_X64}" ]; then
+	clear
+	echo "Bootstraps are required for compilation!"
+	exit 1
+fi
+
+if [ "${BUILD_ONLY_X64}" != "true" ] && [ ! -d "${BOOTSTRAP_X32}" ]; then
 	clear
 	echo "Bootstraps are required for compilation!"
 	exit 1
@@ -363,27 +369,29 @@ cd "${BUILD_DIR}"/build64 || exit
 ${BWRAP64} "${BUILD_DIR}"/wine/configure --enable-win64 ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-amd64 || exit 1
 ${BWRAP64} make -j$(nproc) install || exit 1
 
-export CROSSCC="${CROSSCC_X32}"
-export CROSSCXX="${CROSSCXX_X32}"
-export CFLAGS="${CFLAGS_X32}"
-export CXXFLAGS="${CFLAGS_X32}"
-export CROSSCFLAGS="${CROSSCFLAGS_X32}"
-export CROSSCXXFLAGS="${CROSSCFLAGS_X32}"
+if [ "${BUILD_ONLY_X64}" != "true" ]; then
+	export CROSSCC="${CROSSCC_X32}"
+	export CROSSCXX="${CROSSCXX_X32}"
+	export CFLAGS="${CFLAGS_X32}"
+	export CXXFLAGS="${CFLAGS_X32}"
+	export CROSSCFLAGS="${CROSSCFLAGS_X32}"
+	export CROSSCXXFLAGS="${CROSSCFLAGS_X32}"
 
-mkdir "${BUILD_DIR}"/build32-tools
-cd "${BUILD_DIR}"/build32-tools || exit
-PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ${BWRAP32} "${BUILD_DIR}"/wine/configure ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-x86
-${BWRAP32} make -j$(nproc) install
+	mkdir "${BUILD_DIR}"/build32-tools
+	cd "${BUILD_DIR}"/build32-tools || exit
+	PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ${BWRAP32} "${BUILD_DIR}"/wine/configure ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-x86
+	${BWRAP32} make -j$(nproc) install
 
-export CFLAGS="${CFLAGS_X64}"
-export CXXFLAGS="${CFLAGS_X64}"
-export CROSSCFLAGS="${CROSSCFLAGS_X64}"
-export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
+	export CFLAGS="${CFLAGS_X64}"
+	export CXXFLAGS="${CFLAGS_X64}"
+	export CROSSCFLAGS="${CROSSCFLAGS_X64}"
+	export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
 
-mkdir "${BUILD_DIR}"/build32
-cd "${BUILD_DIR}"/build32 || exit
-PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ${BWRAP32} "${BUILD_DIR}"/wine/configure --with-wine64="${BUILD_DIR}"/build64 --with-wine-tools="${BUILD_DIR}"/build32-tools ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-${BUILD_NAME}-amd64
-${BWRAP32} make -j$(nproc) install
+	mkdir "${BUILD_DIR}"/build32
+	cd "${BUILD_DIR}"/build32 || exit
+	PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ${BWRAP32} "${BUILD_DIR}"/wine/configure --with-wine64="${BUILD_DIR}"/build64 --with-wine-tools="${BUILD_DIR}"/build32-tools ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-${BUILD_NAME}-amd64
+	${BWRAP32} make -j$(nproc) install
+fi
 
 echo
 echo "Compilation complete"
@@ -400,11 +408,14 @@ fi
 
 export XZ_OPT="-9 -T 0"
 
-builds_list="wine-${BUILD_NAME}-x86 wine-${BUILD_NAME}-amd64"
+if [ "${BUILD_ONLY_X64}" = "true" ]; then
+	builds_list="wine-${BUILD_NAME}-amd64"
+else
+	builds_list="wine-${BUILD_NAME}-x86 wine-${BUILD_NAME}-amd64"
+fi
 
 if [ "${EXPERIMENTAL_WOW64}" = "true" ]; then
 	cp -r wine-${BUILD_NAME}-amd64 wine-${BUILD_NAME}-amd64-wow64
-
 	builds_list="${builds_list} wine-${BUILD_NAME}-amd64-wow64"
 fi
 
