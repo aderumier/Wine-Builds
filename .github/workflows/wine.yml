@@ -26,6 +26,9 @@ jobs:
           export BUILD_ONLY_X64=true
           WINE_BRANCH=staging-tkg ./build_wine.sh
           sha256sum *.tar.xz
+      - name: Show config.log on failure
+        if: failure()
+        run: cat ~/build_wine/build64/config.log 2>/dev/null || echo "config.log not found"
       - uses: actions/upload-artifact@v4
         with:
           name: Wine
