@@ -537,7 +537,7 @@ index b126162..9078589 100644
 diff --git a/dlls/win32u/rawinput.c b/dlls/win32u/rawinput.c
 --- a/dlls/win32u/rawinput.c
 +++ b/dlls/win32u/rawinput.c
-@@ -748,6 +748,6 @@ BOOL WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT d
+@@ -745,6 +745,6 @@ BOOL WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT d
              return FALSE;
          }
  
