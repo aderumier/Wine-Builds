@@ -86,8 +86,8 @@ export WINE_BUILD_OPTIONS="--without-oss --disable-winemenubuilder --disable-tes
 export BUILD_DIR="${HOME}"/build_wine
 
 # Change these paths to where your Ubuntu bootstraps reside
-export BOOTSTRAP_X64=/opt/chroots/bionic64_chroot
-export BOOTSTRAP_X32=/opt/chroots/bionic32_chroot
+export BOOTSTRAP_X64=/opt/chroots/jammy64_chroot
+export BOOTSTRAP_X32=/opt/chroots/jammy32_chroot
 
 export scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
@@ -360,8 +360,8 @@ export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
 
 mkdir "${BUILD_DIR}"/build64
 cd "${BUILD_DIR}"/build64 || exit
-${BWRAP64} "${BUILD_DIR}"/wine/configure --enable-win64 ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-amd64
-${BWRAP64} make -j$(nproc) install
+${BWRAP64} "${BUILD_DIR}"/wine/configure --enable-win64 ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-amd64 || exit 1
+${BWRAP64} make -j$(nproc) install || exit 1
 
 export CROSSCC="${CROSSCC_X32}"
 export CROSSCXX="${CROSSCXX_X32}"
