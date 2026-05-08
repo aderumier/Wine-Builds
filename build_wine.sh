@@ -38,7 +38,7 @@ export WINE_BRANCH="${WINE_BRANCH:-staging}"
 # proton_7.0, experimental_7.0, proton_8.0, experimental_8.0, experimental_9.0
 # bleeding-edge
 # Leave empty to use the default branch.
-export PROTON_BRANCH="${PROTON_BRANCH:-proton_10.0}"
+export PROTON_BRANCH="${PROTON_BRANCH:-proton_11.0}"
 
 # Sometimes Wine and Staging versions don't match (for example, 5.15.2).
 # Leave this empty to use Staging version that matches the Wine version.
@@ -52,7 +52,7 @@ export STAGING_VERSION="${STAGING_VERSION:-}"
 export STAGING_ARGS="${STAGING_ARGS:-}"
 
 # Make 64-bit Wine builds with the new WoW64 mode (32-on-64)
-export EXPERIMENTAL_WOW64="${EXPERIMENTAL_WOW64:-false}"
+export EXPERIMENTAL_WOW64="${EXPERIMENTAL_WOW64:-true}"
 
 # Set this to a path to your Wine source code (for example, /home/username/wine-custom-src).
 # This is useful if you already have the Wine source code somewhere on your
@@ -208,7 +208,7 @@ if [ -n "${CUSTOM_SRC_PATH}" ]; then
 	BUILD_NAME="${WINE_VERSION}"-custom
 elif [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
 	if [ "$WINE_BRANCH" = "staging-tkg" ]; then
-		git clone https://github.com/Kron4ek/wine-tkg wine -b 10.20
+		git clone https://github.com/Kron4ek/wine-tkg wine
 	else
 		git clone https://github.com/Kron4ek/wine-tkg wine -b fsync
 	fi
@@ -222,7 +222,7 @@ elif [ "$WINE_BRANCH" = "proton" ]; then
 		git clone https://github.com/ValveSoftware/wine -b "${PROTON_BRANCH}"
 	fi
 
- 	patch -d wine -Np1 < "${scriptdir}"/proton-opencl.patch
+ 	patch -d wine -Np1 < "${scriptdir}"/fix-proton-compilation-and-version-output.patch
 
 	WINE_VERSION="$(cat wine/VERSION | tail -c +14)-$(git -C wine rev-parse --short HEAD)"
 	if [[ "${PROTON_BRANCH}" == "experimental_"* ]] || [ "${PROTON_BRANCH}" = "bleeding-edge" ]; then
