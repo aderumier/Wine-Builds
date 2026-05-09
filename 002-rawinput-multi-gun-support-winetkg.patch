@@ -392,7 +392,7 @@ index c55d680..dfdd298 100644
          return FALSE;
      }
  
-@@ -1865,11 +1974,64 @@ static BOOL X11DRV_RawMotion( XGenericEventCookie *xev )
+@@ -1865,11 +1974,65 @@ static BOOL X11DRV_RawMotion( XGenericEventCookie *xev )
      input.mi.mouseData   = 0;
      input.mi.dwFlags     = MOUSEEVENTF_MOVE;
      input.mi.time        = EVENT_x11_time_to_win32_time( event->time );
