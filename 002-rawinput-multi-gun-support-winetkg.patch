@@ -10,7 +10,7 @@ index 6650d65..69f0863 100644
  #include "winioctl.h"
  #include "ddk/hidclass.h"
  #include "wine/hid.h"
-@@ -282,6 +283,43 @@ static void enumerate_devices( DWORD type, const WCHAR *class )
+@@ -282,6 +283,45 @@ static void enumerate_devices( DWORD type, const WCHAR *class )
      NtClose( class_key );
  }
  
@@ -65,7 +65,7 @@ index 6650d65..69f0863 100644
          free( device->data );
          free( device );
      }
-@@ -304,6 +342,7 @@ static void rawinput_update_device_list( BOOL force )
+@@ -304,7 +342,8 @@ static void rawinput_update_device_list( BOOL force )
      enumerate_devices( RIM_TYPEMOUSE, guid_devinterface_mouseW );
      enumerate_devices( RIM_TYPEKEYBOARD, guid_devinterface_keyboardW );
      enumerate_devices( RIM_TYPEHID, guid_devinterface_hidW );
@@ -521,7 +521,7 @@ diff --git a/server/queue.c b/server/queue.c
 index b126162..9078589 100644
 --- a/server/queue.c
 +++ b/server/queue.c
-@@ -2051,6 +2051,6 @@ static void rawmouse_init( struct rawinput *header, RAWMOUSE *rawmouse, int x, i
+@@ -2051,7 +2051,7 @@ static void rawmouse_init( struct rawinput *header, RAWMOUSE *rawmouse, int x, i
      unsigned int i;
  
      header->type   = RIM_TYPEMOUSE;
@@ -533,7 +533,7 @@ index b126162..9078589 100644
 diff --git a/dlls/win32u/rawinput.c b/dlls/win32u/rawinput.c
 --- a/dlls/win32u/rawinput.c
 +++ b/dlls/win32u/rawinput.c
-@@ -731,6 +731,6 @@ BOOL WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT d
+@@ -731,7 +731,7 @@ BOOL WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT d
              return FALSE;
          }
  
@@ -545,7 +545,7 @@ diff --git a/dlls/win32u/rawinput.c b/dlls/win32u/rawinput.c
 diff --git a/dlls/user32/input.c b/dlls/user32/input.c
 --- a/dlls/user32/input.c
 +++ b/dlls/user32/input.c
-@@ -589,9 +589,59 @@ BOOL WINAPI UnregisterDeviceNotification( HDEVNOTIFY handle )
+@@ -589,11 +589,58 @@ BOOL WINAPI UnregisterDeviceNotification( HDEVNOTIFY handle )
  {
      TRACE("%p\n", handle);
  
@@ -607,7 +607,7 @@ diff --git a/dlls/user32/input.c b/dlls/user32/input.c
 diff --git a/dlls/user32/user32.spec b/dlls/user32/user32.spec
 --- a/dlls/user32/user32.spec
 +++ b/dlls/user32/user32.spec
-@@ -658,7 +658,7 @@
+@@ -658,4 +658,4 @@
  @ stdcall GetRawInputData(ptr long ptr ptr long) NtUserGetRawInputData
  @ stdcall GetRawInputDeviceInfoA(ptr long ptr ptr)
 -@ stdcall GetRawInputDeviceInfoW(ptr long ptr ptr) NtUserGetRawInputDeviceInfo
