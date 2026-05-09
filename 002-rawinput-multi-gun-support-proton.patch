@@ -76,7 +76,7 @@ diff --git a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
 index c55d680..dfdd298 100644
 --- a/dlls/winex11.drv/mouse.c
 +++ b/dlls/winex11.drv/mouse.c
-@@ -143,6 +143,189 @@ MAKE_FUNCPTR(XIQueryDevice);
+@@ -143,6 +143,190 @@ MAKE_FUNCPTR(XIQueryDevice);
  MAKE_FUNCPTR(XIQueryVersion);
  MAKE_FUNCPTR(XISelectEvents);
  #undef MAKE_FUNCPTR
@@ -90,11 +90,12 @@ index c55d680..dfdd298 100644
 +    double x_min, x_max, y_min, y_max;
 +} raw_mouse_map[WINE_RAW_MOUSE_MAX];
 +static int raw_mouse_count;
++static int socket_rawmouse_count;
 +
 +static unsigned int get_raw_mouse_handle( int sourceid )
 +{
 +    int i;
-+    for (i = 0; i < raw_mouse_count; i++)
++    for (i = 0; i < raw_mouse_count && i < socket_rawmouse_count; i++)
 +        if (raw_mouse_map[i].sourceid == sourceid)
 +            return raw_mouse_map[i].handle;
 +    return 0;
@@ -156,7 +157,7 @@ index c55d680..dfdd298 100644
 +        unsigned char changed;
 +        INPUT input;
 +
-+        if (pkt->mouse_index >= WINE_RAW_MOUSE_MAX) goto next;
++        if (pkt->mouse_index >= socket_rawmouse_count || pkt->mouse_index >= WINE_RAW_MOUSE_MAX) goto next;
 +
 +        /* Inject absolute motion */
 +        memset( &input, 0, sizeof(input) );
@@ -266,7 +267,7 @@ index c55d680..dfdd298 100644
  #endif
  
  #ifdef HAVE_X11_EXTENSIONS_XINPUT_H
-@@ -440,6 +468,85 @@ void x11drv_xinput2_init( struct x11drv_thread_data *data )
+@@ -440,6 +472,87 @@ void x11drv_xinput2_init( struct x11drv_thread_data *data )
      }
  
      TRACE( "XInput2 %d.%d available\n", major, minor );
@@ -338,6 +339,8 @@ index c55d680..dfdd298 100644
 +        if (want > 0 && !mouse_socket_active)
 +        {
 +            pthread_t tid;
++            if (want > WINE_RAW_MOUSE_MAX) want = WINE_RAW_MOUSE_MAX;
++            socket_rawmouse_count = want;
 +            mouse_socket_active = 1;
 +            mouse_socket_screen_w = DisplayWidth( data->display, DefaultScreen( data->display ) );
 +            mouse_socket_screen_h = DisplayHeight( data->display, DefaultScreen( data->display ) );
@@ -352,7 +355,7 @@ index c55d680..dfdd298 100644
  }
  
  #else /* HAVE_X11_EXTENSIONS_XINPUT2_H */
-@@ -1851,13 +2080,37 @@ static BOOL map_raw_event_coords( XIRawEvent *event, INPUT *input, BOOL send_raw
+@@ -1851,13 +2084,39 @@ static BOOL map_raw_event_coords( XIRawEvent *event, INPUT *input, BOOL send_raw
  static BOOL X11DRV_RawMotion( XGenericEventCookie *xev )
  {
      struct x11drv_thread_data *thread_data = x11drv_thread_data();
@@ -364,6 +367,8 @@ index c55d680..dfdd298 100644
 +
 +    /* Drain any packets from the mouse injection socket */
 +    process_mouse_socket_packets();
++    if (mouse_socket_active && socket_rawmouse_count > 0)
++        return FALSE;
 +
 +    /* Early diagnostic: log ALL events before any filtering */
 +    {
@@ -392,7 +397,7 @@ index c55d680..dfdd298 100644
          return FALSE;
      }
  
-@@ -1865,11 +1974,65 @@ static BOOL X11DRV_RawMotion( XGenericEventCookie *xev )
+@@ -1865,11 +1978,65 @@ static BOOL X11DRV_RawMotion( XGenericEventCookie *xev )
      input.mi.mouseData   = 0;
      input.mi.dwFlags     = MOUSEEVENTF_MOVE;
      input.mi.time        = EVENT_x11_time_to_win32_time( event->time );
@@ -461,7 +466,7 @@ index c55d680..dfdd298 100644
  
      NtUserSendHardwareInput( 0, flags, &input, 0 );
      return TRUE;
-@@ -1914,12 +2076,43 @@ static BOOL X11DRV_RawButtonEvent( XGenericEventCookie *cookie )
+@@ -1914,12 +2080,45 @@ static BOOL X11DRV_RawButtonEvent( XGenericEventCookie *cookie )
      input.mi.mouseData   = button_data[button];
      input.mi.dwFlags     = button_flags[button] | MOUSEEVENTF_MOVE;
      input.mi.time        = EVENT_x11_time_to_win32_time( event->time );
@@ -470,6 +475,8 @@ index c55d680..dfdd298 100644
      input.mi.dx          = 0;
      input.mi.dy          = 0;
 -    map_raw_event_coords( event, &input, TRUE );
++    process_mouse_socket_packets();
++    if (mouse_socket_active && socket_rawmouse_count > 0) return FALSE;
  
 -    NtUserSendHardwareInput( 0, SEND_HWMSG_NO_MSG, &input, 0 );
 +    {
