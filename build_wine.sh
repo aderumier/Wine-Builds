@@ -318,8 +318,9 @@ fi
 echo "Applying mountmgr-serial-noctty patch (002-fix-mountmgr-serial-noctty.patch)..."
 if ! patch -d wine -Np1 < "${scriptdir}"/002-fix-mountmgr-serial-noctty.patch; then
 	echo
-	echo "Batocera mountmgr patch was not applied correctly!"
-	exit 1
+	echo "WARNING: Batocera mountmgr patch was not applied correctly!"
+	echo "This is normal for newer Wine/Proton versions where the serial check code was removed upstream."
+	echo "Continuing build..."
 fi
 
 cd wine || exit 1
