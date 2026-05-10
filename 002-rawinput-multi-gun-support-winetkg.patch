@@ -79,14 +79,15 @@ index 6650d65..60042cc 100644
      }
  
 diff --git a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
-index c55d680..49043f5 100644
+index c55d680..f27142b 100644
 --- a/dlls/winex11.drv/mouse.c
 +++ b/dlls/winex11.drv/mouse.c
-@@ -31,6 +31,11 @@
+@@ -31,6 +31,12 @@
  #include <X11/cursorfont.h>
  #include <stdarg.h>
  #include <stdint.h>
 +#include <sys/socket.h>
++#include <sys/stat.h>
 +#include <sys/un.h>
 +#include <unistd.h>
 +#include <errno.h>
@@ -94,7 +95,7 @@ index c55d680..49043f5 100644
  #ifdef HAVE_X11_EXTENSIONS_XINPUT_H
  #include <X11/extensions/XInput.h>
  #endif
-@@ -145,6 +150,113 @@ MAKE_FUNCPTR(XISelectEvents);
+@@ -145,6 +151,113 @@ MAKE_FUNCPTR(XISelectEvents);
  #undef MAKE_FUNCPTR
  #endif
  
@@ -163,7 +164,7 @@ index c55d680..49043f5 100644
 +    if ((srv = socket( AF_UNIX, SOCK_STREAM, 0 )) < 0) return NULL;
 +    memset( &addr, 0, sizeof(addr) );
 +    addr.sun_family = AF_UNIX;
-+    strncpy( addr.sun_path, path, sizeof(addr.sun_path) - 1 );
++    memcpy( addr.sun_path, path, strnlen( path, sizeof(addr.sun_path) - 1 ) );
 +    if (bind( srv, (struct sockaddr *)&addr, sizeof(addr) ) < 0) { close( srv ); return NULL; }
 +    chmod( path, 0666 );
 +    listen( srv, 4 );
@@ -208,7 +209,7 @@ index c55d680..49043f5 100644
  #ifdef HAVE_X11_EXTENSIONS_XINPUT_H
  #define MAKE_FUNCPTR(f) static typeof(f) * p##f
  MAKE_FUNCPTR(XOpenDevice);
-@@ -440,6 +552,11 @@ void x11drv_xinput2_init( struct x11drv_thread_data *data )
+@@ -440,6 +553,11 @@ void x11drv_xinput2_init( struct x11drv_thread_data *data )
      }
  
      TRACE( "XInput2 %d.%d available\n", major, minor );
