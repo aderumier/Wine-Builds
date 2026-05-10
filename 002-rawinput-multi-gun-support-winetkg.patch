@@ -545,20 +545,13 @@ diff --git a/dlls/win32u/rawinput.c b/dlls/win32u/rawinput.c
 diff --git a/dlls/user32/input.c b/dlls/user32/input.c
 --- a/dlls/user32/input.c
 +++ b/dlls/user32/input.c
-@@ -589,11 +589,58 @@ BOOL WINAPI UnregisterDeviceNotification( HDEVNOTIFY handle )
+@@ -589,11 +589,50 @@ BOOL WINAPI UnregisterDeviceNotification( HDEVNOTIFY handle )
  {
      TRACE("%p\n", handle);
  
      return I_ScUnregisterDeviceNotification( handle );
  }
  
-+static BOOL is_wine_virtual_raw_mouse_device_name( const WCHAR *name )
-+{
-+    static const WCHAR prefix[] = L"\\\\?\\WINE#VirtualRawMouse";
-+
-+    if (!name) return FALSE;
-+    return !wcsncmp( name, prefix, wcslen( prefix ) );
-+}
 +
 +/***********************************************************************
 + *              GetRawInputDeviceInfoW   (USER32.@)
@@ -579,9 +572,8 @@ diff --git a/dlls/user32/input.c b/dlls/user32/input.c
 +    ret = NtUserGetRawInputDeviceInfo( device, command, wide, &wide_size );
 +    if (ret == ~0U) return ret;
 +
-+    if (!is_wine_virtual_raw_mouse_device_name( wide ))
-+        return NtUserGetRawInputDeviceInfo( device, command, data, size );
-+
++    /* Always convert to ANSI for compatibility with apps (DemulShooter) that
++     * call GetRawInputDeviceInfoW but read the result with PtrToStringAnsi */
 +    nbytes = WideCharToMultiByte( CP_ACP, 0, wide, -1, NULL, 0, NULL, NULL );
 +    if (!data)
 +    {
